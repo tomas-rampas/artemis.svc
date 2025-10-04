@@ -106,7 +106,7 @@ pwsh ./Setup-Certificates.ps1
 This creates:
 - **Artemis Root CA** certificate (self-signed)
 - **artemis-api.local** server certificate (signed by CA)
-- Certificate files in `/home/mcquak/projs/dotnet/artemis.svc/certs/`
+- Certificate files in `~/projs/dotnet/artemis.svc/certs/`
 - Automatic installation to .NET X509Store
 
 ### 2. Run with Docker Compose
@@ -208,7 +208,7 @@ The application loads the server certificate from `CurrentUser\My`, and the .NET
 Docker containers require special handling:
 
 1. **Certificate files mounted as volumes**
-   - Source: `/home/mcquak/projs/dotnet/artemis.svc/certs/`
+   - Source: `~/projs/dotnet/artemis.svc/certs/`
    - Target: `/certs/` (inside container)
 
 2. **Installation script run during container startup**
@@ -250,10 +250,10 @@ pwsh ./Setup-Certificates.ps1
 ```
 
 **Output:**
-- `/home/mcquak/projs/dotnet/artemis.svc/certs/artemis-ca.pfx` - CA certificate (Root)
-- `/home/mcquak/projs/dotnet/artemis.svc/certs/artemis-ca.crt` - CA certificate (public)
-- `/home/mcquak/projs/dotnet/artemis.svc/certs/artemis-api.pfx` - Server certificate (My)
-- `/home/mcquak/projs/dotnet/artemis.svc/certs/artemis-api.crt` - Server certificate (public)
+- `~/projs/dotnet/artemis.svc/certs/artemis-ca.pfx` - CA certificate (Root)
+- `~/projs/dotnet/artemis.svc/certs/artemis-ca.crt` - CA certificate (public)
+- `~/projs/dotnet/artemis.svc/certs/artemis-api.pfx` - Server certificate (My)
+- `~/projs/dotnet/artemis.svc/certs/artemis-api.crt` - Server certificate (public)
 - Certificate thumbprint written to `appsettings.json`
 
 #### 2. Build Docker Image
@@ -285,7 +285,7 @@ docker run -d \
   --name artemis-api \
   -p 5000:5000 \
   -p 5001:5001 \
-  -v /home/mcquak/projs/dotnet/artemis.svc/certs:/certs:ro \
+  -v ~/projs/dotnet/artemis.svc/certs:/certs:ro \
   -e ASPNETCORE_ENVIRONMENT=Development \
   artemis-api:latest
 ```
@@ -425,7 +425,7 @@ pwsh ./Setup-Certificates.ps1
 ```
 
 **Output:**
-- Certificates created in `/home/mcquak/projs/dotnet/artemis.svc/certs/`
+- Certificates created in `~/projs/dotnet/artemis.svc/certs/`
 - Certificates installed to `~/.dotnet/corefx/cryptography/x509stores/`
 - `appsettings.json` updated with thumbprint
 
@@ -689,7 +689,7 @@ docker ps -a
 
 # Run container interactively to debug
 docker run -it --rm \
-  -v /home/mcquak/projs/dotnet/artemis.svc/certs:/certs:ro \
+  -v ~/projs/dotnet/artemis.svc/certs:/certs:ro \
   artemis-api:latest \
   /bin/bash
 ```
@@ -747,7 +747,7 @@ docker exec artemis-api pwsh -File ./Install-DockerCertificates.ps1
 **Diagnostic commands:**
 ```bash
 # Check certificate files on host
-ls -la /home/mcquak/projs/dotnet/artemis.svc/certs/
+ls -la ~/projs/dotnet/artemis.svc/certs/
 
 # Check mounted files in container
 docker exec artemis-api ls -la /certs/
