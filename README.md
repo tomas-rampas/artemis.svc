@@ -1,155 +1,531 @@
-# Artemis Invoicing API
+# ASP.NET Core Docker SSL/TLS Reference Implementation
 
-A simple ASP.NET Core Web API for invoice management with SSL/TLS certificate support from Windows Certificate Store.
+A comprehensive reference implementation demonstrating SSL/TLS certificate configuration for ASP.NET Core applications running in Docker containers on Linux, with cross-platform certificate management using PowerShell Core and .NET X509Store API.
 
-## Features
+**Project Focus:** Docker SSL/TLS configuration, not invoice management (the API is just a demo application)
 
-- **Full CRUD Operations**: Create, Read, Update, and Delete invoices
-- **SSL/TLS Support**: Kestrel configured to load certificates from Windows Certificate Store
-- **Swagger/OpenAPI**: Interactive API documentation at the root URL
-- **In-Memory Storage**: Simple data store for demonstration purposes
-- **Docker-Ready**: Clean architecture suitable for containerization
-- **Comprehensive Logging**: Built-in logging for all operations
+## Overview
 
-## Technology Stack
+This project demonstrates best practices for:
+- Self-signed certificate generation for development environments
+- X509Store certificate management on Linux and WSL
+- Cross-platform certificate deployment (WSL, Linux, Docker)
+- Kestrel HTTPS configuration with custom certificates
+- Automated certificate installation with PowerShell Core
+- Non-root Docker container certificate handling
 
-- **.NET 9.0**: Latest LTS version of ASP.NET Core
-- **Kestrel**: High-performance web server
-- **Swagger/OpenAPI**: API documentation with Swashbuckle
-- **In-Memory Data Store**: Thread-safe concurrent dictionary
+The project includes a minimal REST API (invoice management) to demonstrate the certificate configuration in a real-world application context.
+
+## Why This Project?
+
+Configuring SSL/TLS certificates for ASP.NET Core in Docker on Linux is **non-trivial**:
+
+- Windows Certificate Store doesn't exist on Linux
+- .NET uses a different certificate store structure on Linux (`~/.dotnet/corefx/cryptography/x509stores/`)
+- Simply copying certificate files is insufficient - certificates must be registered via X509Store API
+- Docker containers require special handling for certificate mounting and installation
+- Cross-platform certificate management requires PowerShell Core (pwsh)
+- Certificate chain validation works differently on Linux vs Windows
+
+This project solves these challenges with a complete, working implementation that you can use as a reference for your own projects.
+
+## What You'll Learn
+
+This project demonstrates:
+
+### 1. Certificate Generation
+- Creating self-signed CA certificates with OpenSSL
+- Generating server certificates signed by custom CA
+- Exporting certificates in multiple formats (PFX, CRT)
+- Proper Subject Alternative Names (SAN) configuration
+
+### 2. Linux Certificate Management
+- Understanding .NET certificate store structure on Linux
+- Using X509Store API for certificate installation
+- Certificate chain validation on Linux
+- Proper file permissions and ownership
+
+### 3. Cross-Platform Scripting
+- PowerShell Core (pwsh) for Linux/Docker
+- Automated certificate deployment scripts
+- Certificate verification and testing utilities
+- Platform-agnostic certificate management
+
+### 4. Docker SSL Configuration
+- Certificate volume mounts in Docker
+- Runtime certificate installation patterns
+- Non-root container security considerations
+- Docker Compose for development workflows
+
+### 5. ASP.NET Core HTTPS
+- Kestrel certificate configuration
+- Certificate thumbprint-based loading
+- Fallback to development certificates
+- appsettings.json certificate configuration
+
+## Key Features
+
+### Certificate Management
+- ✅ Self-signed CA and server certificate generation
+- ✅ Automated installation to .NET X509Store (Root and My stores)
+- ✅ Cross-platform PowerShell scripts (pwsh)
+- ✅ Docker container certificate mounting
+- ✅ Certificate chain validation
+- ✅ Automated thumbprint configuration
+
+### Docker Integration
+- ✅ Multi-stage Dockerfile optimized for Linux
+- ✅ Certificate installation during container startup
+- ✅ Non-root container execution (app user)
+- ✅ Docker Compose configuration
+- ✅ Health checks and monitoring
+
+### Demo Application
+- ✅ Simple REST API (invoice management)
+- ✅ Kestrel with custom certificate configuration
+- ✅ Swagger/OpenAPI documentation
+- ✅ Proper HTTPS endpoint configuration
+
+## Quick Start
+
+### Prerequisites
+
+- Docker and Docker Compose
+- PowerShell Core (pwsh) 7.0 or later
+- .NET 9.0 SDK (for local development)
+- Linux, WSL, or macOS (Windows support limited to local development)
+
+### 1. Generate Certificates
+
+Run the certificate setup script to generate CA and server certificates:
+
+```bash
+pwsh ./Setup-Certificates.ps1
+```
+
+This creates:
+- **Artemis Root CA** certificate (self-signed)
+- **artemis-api.local** server certificate (signed by CA)
+- Certificate files in `/home/mcquak/projs/dotnet/artemis.svc/certs/`
+- Automatic installation to .NET X509Store
+
+### 2. Run with Docker Compose
+
+Start the application with Docker:
+
+```bash
+docker-compose up --build
+```
+
+The application will be available at:
+- **HTTPS**: `https://localhost:5001`
+- **HTTP**: `http://localhost:5000`
+- **Swagger UI**: `https://localhost:5001/`
+
+### 3. Verify Certificate Configuration
+
+Test that the custom certificate is working:
+
+```bash
+# Verify HTTPS connection with custom certificate
+curl -v https://artemis-api.local:5001/api/invoices
+
+# Run certificate validation tests
+pwsh ./Test-CertificateSetup.ps1
+```
+
+### 4. Inspect Docker Container Certificates
+
+View certificates inside the running container:
+
+```bash
+# List certificates in CurrentUser\My store
+docker exec artemis-api pwsh -Command "Get-ChildItem Cert:\\CurrentUser\\My"
+
+# List certificates in CurrentUser\Root store
+docker exec artemis-api pwsh -Command "Get-ChildItem Cert:\\CurrentUser\\Root"
+
+# View .NET certificate store directory structure
+docker exec artemis-api ls -la /home/app/.dotnet/corefx/cryptography/x509stores/
+```
+
+## Certificate Architecture on Linux
+
+### .NET Certificate Store Structure
+
+On Linux, .NET Core uses a file-based certificate store located at:
+
+```
+$HOME/.dotnet/corefx/cryptography/x509stores/
+├── root/          # Trusted Root CA certificates
+│   └── <hash>.pfx
+├── my/            # Personal certificates (with private keys)
+│   ├── <thumbprint>.pfx
+│   └── <thumbprint>.crt
+└── ca/            # Intermediate CA certificates
+```
+
+For the Docker container (running as `app` user):
+- Store path: `/home/app/.dotnet/corefx/cryptography/x509stores/`
+
+For WSL/Linux development:
+- Store path: `~/.dotnet/corefx/cryptography/x509stores/`
+
+### Why X509Store API is Required
+
+Simply copying certificate files to these directories is **insufficient**. Certificates must be:
+
+1. **Loaded into memory** as X509Certificate2 objects with proper flags
+2. **Added to the appropriate X509Store** via the .NET API
+3. **Properly indexed** by thumbprint and hash
+4. **Validated and trusted** by the certificate chain
+
+The PowerShell scripts in this project use the X509Store API to ensure certificates are correctly installed:
+
+```powershell
+# Install certificate to CurrentUser\My store
+$store = New-Object System.Security.Cryptography.X509Certificates.X509Store(
+    [System.Security.Cryptography.X509Certificates.StoreName]::My,
+    [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
+)
+$store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+$store.Add($cert)
+$store.Close()
+```
+
+### Certificate Chain
+
+```
+[Artemis Root CA]  (CurrentUser\Root)
+        ↓
+[artemis-api.local]  (CurrentUser\My)
+```
+
+The application loads the server certificate from `CurrentUser\My`, and the .NET framework validates it against the CA certificate in `CurrentUser\Root`.
+
+### Docker Considerations
+
+Docker containers require special handling:
+
+1. **Certificate files mounted as volumes**
+   - Source: `/home/mcquak/projs/dotnet/artemis.svc/certs/`
+   - Target: `/certs/` (inside container)
+
+2. **Installation script run during container startup**
+   - `Install-DockerCertificates.ps1` executed in ENTRYPOINT
+   - Installs CA to Root store
+   - Installs server certificate to My store
+
+3. **Proper file permissions**
+   - PFX files: 600 (read/write for owner only)
+   - CRT files: 644 (read for all)
+   - Owner: `app` user (non-root)
+
+4. **Non-root user access**
+   - Container runs as `app` user (UID 1000)
+   - Certificate store: `/home/app/.dotnet/corefx/cryptography/x509stores/`
+   - PowerShell scripts run as `app` user
+
+## Docker Deployment Guide
+
+### Overview
+
+This project demonstrates **runtime certificate installation** as the recommended approach for Docker deployments.
+
+**Advantages:**
+- Certificates not baked into image (security)
+- Easy certificate rotation without rebuild
+- Same image works across environments
+- Supports certificate updates without image changes
+- Clear separation of concerns
+
+### Step-by-Step Deployment
+
+#### 1. Generate Certificates on Host
+
+Run the setup script to create certificates:
+
+```bash
+pwsh ./Setup-Certificates.ps1
+```
+
+**Output:**
+- `/home/mcquak/projs/dotnet/artemis.svc/certs/artemis-ca.pfx` - CA certificate (Root)
+- `/home/mcquak/projs/dotnet/artemis.svc/certs/artemis-ca.crt` - CA certificate (public)
+- `/home/mcquak/projs/dotnet/artemis.svc/certs/artemis-api.pfx` - Server certificate (My)
+- `/home/mcquak/projs/dotnet/artemis.svc/certs/artemis-api.crt` - Server certificate (public)
+- Certificate thumbprint written to `appsettings.json`
+
+#### 2. Build Docker Image
+
+Build the multi-stage Docker image:
+
+```bash
+docker build -t artemis-api:latest .
+```
+
+**Dockerfile stages:**
+- **base**: Runtime image with PowerShell Core
+- **build**: Build environment
+- **publish**: Published application
+- **final**: Final image with entrypoint script
+
+#### 3. Run Docker Container
+
+**Option A: Using Docker Compose (Recommended)**
+
+```bash
+docker-compose up -d
+```
+
+**Option B: Using Docker CLI**
+
+```bash
+docker run -d \
+  --name artemis-api \
+  -p 5000:5000 \
+  -p 5001:5001 \
+  -v /home/mcquak/projs/dotnet/artemis.svc/certs:/certs:ro \
+  -e ASPNETCORE_ENVIRONMENT=Development \
+  artemis-api:latest
+```
+
+#### 4. Verify Deployment
+
+Check application logs:
+
+```bash
+docker logs artemis-api
+```
+
+Expected output:
+```
+Installing certificates for Docker container...
+Installing CA certificate to Root store...
+Installing server certificate to My store...
+Certificate installation completed successfully.
+Starting application...
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: https://0.0.0.0:5001
+```
+
+Test HTTPS endpoint:
+
+```bash
+curl -k https://localhost:5001/api/invoices
+```
+
+### Docker Compose Configuration
+
+The `docker-compose.yml` demonstrates volume mounting for certificates:
+
+```yaml
+services:
+  artemis-api:
+    build: .
+    ports:
+      - "5000:5000"
+      - "5001:5001"
+    volumes:
+      - ./certs:/certs:ro  # Mount certificates read-only
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=https://+:5001;http://+:5000
+```
+
+**Volume mount details:**
+- **Source**: `./certs` (relative to docker-compose.yml)
+- **Target**: `/certs` (inside container)
+- **Mode**: `ro` (read-only for security)
+
+### Dockerfile Architecture
+
+The Dockerfile implements runtime certificate installation:
+
+```dockerfile
+# Install PowerShell Core for certificate management
+RUN apt-get update && apt-get install -y \
+    wget \
+    apt-transport-https \
+    software-properties-common
+
+# Install PowerShell
+RUN wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+RUN dpkg -i packages-microsoft-prod.deb
+RUN apt-get update && apt-get install -y powershell
+
+# Copy certificate installation script
+COPY Install-DockerCertificates.ps1 .
+RUN chmod +x Install-DockerCertificates.ps1
+
+# Create non-root user
+RUN useradd -m -u 1000 app && chown -R app:app /app
+USER app
+
+# Entrypoint: Install certificates, then start app
+ENTRYPOINT ["sh", "-c", "pwsh ./Install-DockerCertificates.ps1 && exec dotnet artemis.svc.dll"]
+```
+
+**Key components:**
+1. PowerShell Core installation for X509Store access
+2. Certificate installation script copied into image
+3. Non-root user (`app`) for security
+4. Entrypoint that installs certificates before starting app
+
+### Certificate Rotation
+
+To rotate certificates without rebuilding the image:
+
+1. Generate new certificates: `pwsh ./Setup-Certificates.ps1`
+2. Update `appsettings.json` with new thumbprint
+3. Restart container: `docker-compose restart`
+
+The container will pick up the new certificates from the mounted volume and install them on startup.
+
+### Verification Commands
+
+Verify certificate installation inside container:
+
+```bash
+# Check CurrentUser\My store (server certificate)
+docker exec artemis-api pwsh -Command "Get-ChildItem Cert:\\CurrentUser\\My | Format-List Subject, Thumbprint, NotAfter"
+
+# Check CurrentUser\Root store (CA certificate)
+docker exec artemis-api pwsh -Command "Get-ChildItem Cert:\\CurrentUser\\Root | Format-List Subject, Thumbprint, NotAfter"
+
+# Verify certificate chain
+docker exec artemis-api pwsh ./Test-CertificateSetup.ps1
+
+# Check certificate files
+docker exec artemis-api ls -la /certs
+
+# View certificate store directory
+docker exec artemis-api ls -la /home/app/.dotnet/corefx/cryptography/x509stores/
+```
+
+## Scripts
+
+This project includes three PowerShell Core scripts for certificate management:
+
+### Setup-Certificates.ps1
+
+**Purpose:** Generate self-signed CA and server certificates for development
+
+**What it does:**
+1. Creates a self-signed CA certificate (Artemis Root CA)
+2. Generates a server certificate signed by the CA (artemis-api.local)
+3. Exports certificates in PFX and CRT formats
+4. Installs certificates to .NET X509Store (Root and My stores)
+5. Updates `appsettings.json` with certificate thumbprint
+6. Sets proper file permissions (600 for PFX, 644 for CRT)
+
+**Usage:**
+```bash
+pwsh ./Setup-Certificates.ps1
+```
+
+**Output:**
+- Certificates created in `/home/mcquak/projs/dotnet/artemis.svc/certs/`
+- Certificates installed to `~/.dotnet/corefx/cryptography/x509stores/`
+- `appsettings.json` updated with thumbprint
+
+### Install-DockerCertificates.ps1
+
+**Purpose:** Install certificates inside Docker containers at runtime
+
+**What it does:**
+1. Loads CA certificate from `/certs/artemis-ca.pfx`
+2. Installs CA to CurrentUser\Root store
+3. Loads server certificate from `/certs/artemis-api.pfx`
+4. Installs server certificate to CurrentUser\My store
+5. Verifies installation and displays certificate details
+
+**Usage:**
+```bash
+# Inside Docker container (automatic via ENTRYPOINT)
+pwsh ./Install-DockerCertificates.ps1
+
+# Manual execution in running container
+docker exec artemis-api pwsh ./Install-DockerCertificates.ps1
+```
+
+**Prerequisites:**
+- Certificate files mounted at `/certs/`
+- PowerShell Core (pwsh) installed in container
+- Running as user with access to home directory
+
+### Test-CertificateSetup.ps1
+
+**Purpose:** Verify certificate installation and chain validation
+
+**What it does:**
+1. Lists certificates in CurrentUser\My store
+2. Lists certificates in CurrentUser\Root store
+3. Verifies certificate chain for server certificate
+4. Displays certificate expiration dates
+5. Checks for certificate configuration in appsettings.json
+
+**Usage:**
+```bash
+# On host (WSL/Linux)
+pwsh ./Test-CertificateSetup.ps1
+
+# Inside Docker container
+docker exec artemis-api pwsh ./Test-CertificateSetup.ps1
+```
+
+**Sample output:**
+```
+Testing Certificate Setup...
+
+Certificates in CurrentUser\My:
+Subject: CN=artemis-api.local
+Thumbprint: A1B2C3D4E5F6...
+NotAfter: 2027-10-03
+
+Certificates in CurrentUser\Root:
+Subject: CN=Artemis Root CA
+Thumbprint: B2C3D4E5F6G7...
+NotAfter: 2030-10-03
+
+Certificate chain validation: PASSED
+```
 
 ## Project Structure
 
 ```
 artemis.svc/
 ├── Controllers/
-│   └── InvoicesController.cs      # REST API endpoints
+│   └── InvoicesController.cs      # REST API endpoints (demo)
 ├── Models/
-│   └── Invoice.cs                 # Invoice entity and status enum
+│   └── Invoice.cs                 # Invoice entity (demo)
 ├── Services/
-│   ├── IInvoiceService.cs         # Service interface
-│   └── InMemoryInvoiceService.cs  # In-memory implementation
-├── Program.cs                      # Application entry point & configuration
-├── appsettings.json               # Production configuration
-├── appsettings.Development.json   # Development configuration
-└── artemis.svc.csproj            # Project file
+│   ├── IInvoiceService.cs         # Service interface (demo)
+│   └── InMemoryInvoiceService.cs  # In-memory storage (demo)
+├── certs/                          # Certificate files (generated)
+│   ├── artemis-ca.pfx             # CA certificate with private key
+│   ├── artemis-ca.crt             # CA certificate (public)
+│   ├── artemis-api.pfx            # Server certificate with private key
+│   └── artemis-api.crt            # Server certificate (public)
+├── Setup-Certificates.ps1          # Certificate generation script
+├── Install-DockerCertificates.ps1  # Docker certificate installer
+├── Test-CertificateSetup.ps1       # Certificate verification script
+├── Program.cs                      # Application entry point & Kestrel config
+├── Dockerfile                      # Multi-stage Docker build
+├── docker-compose.yml              # Docker Compose configuration
+├── appsettings.json                # Certificate thumbprint configuration
+└── artemis.svc.csproj             # Project file
 ```
 
-## Scripts
+## Demo Application: Invoice API
 
-The project includes PowerShell scripts for certificate management:
-
-- **Setup-Certificates.ps1** - Generate and install CA and server certificates
-- **Install-DockerCertificates.ps1** - Install certificates in Docker containers
-- **Test-CertificateSetup.ps1** - Verify certificate installation
-
-See [QUICKSTART.md](/home/mcquak/projs/dotnet/artemis.svc/QUICKSTART.md) for usage instructions.
-
-## SSL Certificate Configuration
-
-### Certificate Requirements
-
-The application is configured to load SSL certificates from the Windows Certificate Store:
-
-- **Certificate Location**: `Current User\My` (Personal certificate store)
-- **CA Certificate**: Should be installed in `Current User\Root` (Trusted Root Certification Authorities)
-- **Configuration**: Certificate thumbprint specified in `appsettings.json`
-
-### Certificate Setup Steps
-
-#### 1. Generate a Self-Signed Certificate (Development)
-
-Using PowerShell (run as Administrator):
-
-```powershell
-# Create self-signed certificate
-$cert = New-SelfSignedCertificate `
-    -Subject "CN=artemis.local" `
-    -DnsName "artemis.local", "localhost" `
-    -KeyAlgorithm RSA `
-    -KeyLength 2048 `
-    -NotAfter (Get-Date).AddYears(2) `
-    -CertStoreLocation "Cert:\CurrentUser\My" `
-    -KeyExportPolicy Exportable `
-    -KeyUsage DigitalSignature, KeyEncipherment `
-    -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.1")
-
-# Display certificate thumbprint
-Write-Host "Certificate Thumbprint: $($cert.Thumbprint)" -ForegroundColor Green
-
-# Export and import to Trusted Root (optional for self-signed)
-$certPath = "C:\Temp\artemis-cert.cer"
-Export-Certificate -Cert $cert -FilePath $certPath
-Import-Certificate -FilePath $certPath -CertStoreLocation "Cert:\CurrentUser\Root"
-```
-
-#### 2. Using an Existing Certificate
-
-If you have an existing certificate from a CA:
-
-```powershell
-# Import certificate with private key (PFX/PKCS12)
-$pfxPath = "C:\Path\To\Certificate.pfx"
-$pfxPassword = ConvertTo-SecureString -String "YourPassword" -Force -AsPlainText
-Import-PfxCertificate -FilePath $pfxPath `
-    -CertStoreLocation "Cert:\CurrentUser\My" `
-    -Password $pfxPassword
-
-# Import CA certificate to Trusted Root
-Import-Certificate -FilePath "C:\Path\To\CA-Certificate.cer" `
-    -CertStoreLocation "Cert:\CurrentUser\Root"
-```
-
-#### 3. Find Certificate Thumbprint
-
-```powershell
-# List all certificates in Current User\My store
-Get-ChildItem -Path "Cert:\CurrentUser\My" | Format-Table Subject, Thumbprint, NotAfter
-
-# Find specific certificate
-Get-ChildItem -Path "Cert:\CurrentUser\My" | Where-Object { $_.Subject -like "*artemis*" }
-```
-
-#### 4. Configure Application
-
-Update the `CertificateSettings:Thumbprint` value in `appsettings.json` or `appsettings.Development.json`:
-
-```json
-{
-  "CertificateSettings": {
-    "Thumbprint": "A1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6Q7R8S9T0",
-    "StoreName": "My",
-    "StoreLocation": "CurrentUser"
-  }
-}
-```
-
-**Note**: Remove any spaces or colons from the thumbprint.
-
-### Certificate Store Locations
-
-- **Current User\My**: `Cert:\CurrentUser\My` (Personal certificates)
-- **Current User\Root**: `Cert:\CurrentUser\Root` (Trusted Root CAs)
-- **Local Machine\My**: `Cert:\LocalMachine\My` (requires admin privileges)
-
-### Fallback Behavior
-
-If no certificate is configured or the certificate cannot be loaded:
-- The application will fall back to the ASP.NET Core development certificate
-- A warning message will be displayed in the console
-- The application will continue to run on HTTPS using the development certificate
-
-## API Endpoints
-
-### Base URL
-- HTTPS: `https://localhost:5001`
-- HTTP: `http://localhost:5000`
+The project includes a minimal REST API for invoice management to demonstrate the certificate configuration in a real-world application context.
 
 ### Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/invoices` | Get all invoices |
+| GET | `/api/invoices` | List all invoices |
 | GET | `/api/invoices/{id}` | Get invoice by ID |
 | POST | `/api/invoices` | Create new invoice |
 | PUT | `/api/invoices/{id}` | Update invoice |
@@ -161,249 +537,390 @@ If no certificate is configured or the certificate cannot be loaded:
 {
   "id": 1,
   "invoiceNumber": "INV-2025-001",
-  "date": "2025-09-23T10:30:00Z",
+  "date": "2025-10-03T10:30:00Z",
   "customerName": "Acme Corporation",
   "amount": 1500.00,
   "status": 1
 }
 ```
 
-### Invoice Status Enum
-
+**Invoice Status Values:**
 - `0` - Draft
 - `1` - Sent
 - `2` - Paid
 - `3` - Overdue
 - `4` - Cancelled
 
-## Running the Application
-
-### Prerequisites
-
-- .NET 9.0 SDK or later
-- Windows OS (for Windows Certificate Store integration)
-- Valid SSL certificate (or use self-signed for development)
-
-### Development
-
-1. **Restore Dependencies**:
-   ```bash
-   dotnet restore
-   ```
-
-2. **Build the Project**:
-   ```bash
-   dotnet build
-   ```
-
-3. **Run the Application**:
-   ```bash
-   dotnet run
-   ```
-
-4. **Access Swagger UI**:
-   - Navigate to `https://localhost:5001/` or `http://localhost:5000/`
-
-### Production
-
-1. **Publish the Application**:
-   ```bash
-   dotnet publish -c Release -o ./publish
-   ```
-
-2. **Run Published Application**:
-   ```bash
-   cd publish
-   dotnet artemis.svc.dll
-   ```
-
-## Testing the API
-
-### Using cURL
+### Testing the API
 
 ```bash
-# Get all invoices
+# Verify HTTPS is working with custom certificate
 curl -k https://localhost:5001/api/invoices
 
-# Get invoice by ID
-curl -k https://localhost:5001/api/invoices/1
+# Access Swagger UI
+open https://localhost:5001
 
-# Create new invoice
+# Create a test invoice
 curl -k -X POST https://localhost:5001/api/invoices \
   -H "Content-Type: application/json" \
   -d '{
-    "invoiceNumber": "INV-2025-004",
-    "date": "2025-10-03T00:00:00Z",
-    "customerName": "New Customer Ltd",
-    "amount": 3500.00,
+    "invoiceNumber": "INV-2025-999",
+    "date": "2025-10-04T00:00:00Z",
+    "customerName": "Test Customer",
+    "amount": 1000.00,
     "status": 0
   }'
-
-# Update invoice
-curl -k -X PUT https://localhost:5001/api/invoices/1 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "invoiceNumber": "INV-2025-001",
-    "date": "2025-09-23T00:00:00Z",
-    "customerName": "Acme Corporation",
-    "amount": 1500.00,
-    "status": 2
-  }'
-
-# Delete invoice
-curl -k -X DELETE https://localhost:5001/api/invoices/1
 ```
 
-### Using PowerShell
+**Note:** The invoice API uses in-memory storage and is for demonstration purposes only. Data is lost when the container restarts.
 
-```powershell
-# Skip SSL certificate validation for self-signed certs
-[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
+## Technology Stack
 
-# Get all invoices
-Invoke-RestMethod -Uri "https://localhost:5001/api/invoices" -Method Get
-
-# Create new invoice
-$invoice = @{
-    invoiceNumber = "INV-2025-005"
-    date = "2025-10-03T00:00:00Z"
-    customerName = "PowerShell Customer"
-    amount = 2500.00
-    status = 0
-} | ConvertTo-Json
-
-Invoke-RestMethod -Uri "https://localhost:5001/api/invoices" `
-    -Method Post `
-    -ContentType "application/json" `
-    -Body $invoice
-```
-
-## Docker Preparation
-
-### Dockerfile (Example)
-
-```dockerfile
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
-WORKDIR /app
-EXPOSE 80
-EXPOSE 443
-
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
-WORKDIR /src
-COPY ["artemis.svc.csproj", "./"]
-RUN dotnet restore "artemis.svc.csproj"
-COPY . .
-RUN dotnet build "artemis.svc.csproj" -c Release -o /app/build
-
-FROM build AS publish
-RUN dotnet publish "artemis.svc.csproj" -c Release -o /app/publish
-
-FROM base AS final
-WORKDIR /app
-COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "artemis.svc.dll"]
-```
-
-**Note**: For Docker deployment, you'll need to configure certificate mounting or use environment-specific certificate configuration.
+- **.NET 9.0**: ASP.NET Core Web API
+- **Kestrel**: High-performance web server with custom certificate support
+- **X509Store API**: Cross-platform certificate management
+- **PowerShell Core (pwsh)**: Certificate automation scripts
+- **Docker**: Container runtime for Linux deployment
+- **OpenSSL**: Certificate generation (via PowerShell)
+- **Swagger/OpenAPI**: API documentation
 
 ## Configuration
 
 ### appsettings.json
 
+The application loads certificates based on thumbprint configuration:
+
 ```json
 {
-  "Logging": {
-    "LogLevel": {
-      "Default": "Information",
-      "Microsoft.AspNetCore": "Warning"
-    }
-  },
   "Kestrel": {
     "Endpoints": {
       "Https": {
-        "Url": "https://localhost:5001"
+        "Url": "https://0.0.0.0:5001"
       },
       "Http": {
-        "Url": "http://localhost:5000"
+        "Url": "http://0.0.0.0:5000"
       }
     }
   },
   "CertificateSettings": {
-    "Thumbprint": "YOUR_CERTIFICATE_THUMBPRINT_HERE",
+    "Thumbprint": "A1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6Q7R8S9T0",
     "StoreName": "My",
     "StoreLocation": "CurrentUser"
   }
 }
 ```
 
-### Environment Variables (Alternative Configuration)
+**Configuration options:**
+- `Thumbprint`: Certificate thumbprint (no spaces or colons)
+- `StoreName`: Certificate store name (`My`, `Root`, `CA`)
+- `StoreLocation`: Store location (`CurrentUser`, `LocalMachine`)
+
+### Program.cs Certificate Loading
+
+The application loads certificates using the X509Store API:
+
+```csharp
+using (var store = new X509Store(StoreName.My, StoreLocation.CurrentUser))
+{
+    store.Open(OpenFlags.ReadOnly);
+    var certs = store.Certificates.Find(
+        X509FindType.FindByThumbprint,
+        thumbprint,
+        validOnly: false
+    );
+
+    if (certs.Count > 0)
+    {
+        options.ServerCertificate = certs[0];
+    }
+}
+```
+
+### Environment Variables
+
+Override configuration using environment variables:
 
 ```bash
 # Override certificate thumbprint
-export CertificateSettings__Thumbprint="A1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6Q7R8S9T0"
+export CertificateSettings__Thumbprint="YOUR_THUMBPRINT_HERE"
 
 # Override Kestrel endpoints
 export Kestrel__Endpoints__Https__Url="https://0.0.0.0:5001"
+
+# Set ASP.NET Core environment
+export ASPNETCORE_ENVIRONMENT=Production
 ```
-
-## Security Considerations
-
-1. **Certificate Storage**: Production certificates should have appropriate access controls
-2. **Certificate Expiration**: Monitor certificate expiration dates
-3. **Private Key Protection**: Ensure private keys are properly secured
-4. **HTTPS Redirection**: Enabled by default in production
-5. **Input Validation**: Basic validation implemented in controller
-6. **Error Handling**: Proper error responses without exposing sensitive information
 
 ## Troubleshooting
 
-### Certificate Not Found
+### Certificate Not Trusted in Docker
 
-**Error**: "Certificate with thumbprint ... not found"
+**Symptom:** Certificate chain validation fails in Docker container
 
-**Solutions**:
-- Verify the thumbprint is correct (no spaces or colons)
-- Check certificate is in the correct store location
-- Ensure the certificate has a private key
-- Verify current user has read access to the certificate
+**Diagnostic commands:**
+```bash
+# Verify CA certificate installed in Root store
+docker exec artemis-api pwsh -Command "Get-ChildItem Cert:\\CurrentUser\\Root"
 
-### SSL Connection Failed
+# Check certificate chain
+docker exec artemis-api pwsh ./Test-CertificateSetup.ps1
 
-**Error**: "SSL connection could not be established"
+# View application logs
+docker logs artemis-api
+```
 
-**Solutions**:
-- Verify CA certificate is in Trusted Root store
-- Check certificate validity period
-- Ensure certificate includes localhost/artemis.local in SAN
-- Try using `-k` flag with curl to skip validation
+**Solutions:**
+1. Ensure `Install-DockerCertificates.ps1` ran during startup (check logs)
+2. Verify certificate files mounted correctly: `docker exec artemis-api ls -la /certs`
+3. Check file permissions on PFX files (should be 600)
+4. Ensure CA certificate is in Root store, not just My store
 
-### Port Already in Use
+### Application Won't Start in Docker
 
-**Error**: "Address already in use"
+**Symptom:** Container exits immediately or fails to start
 
-**Solutions**:
-- Change port numbers in appsettings.json
-- Stop other applications using ports 5000/5001
-- Use `netstat -ano | findstr :5001` to find conflicting process
+**Diagnostic commands:**
+```bash
+# Check container logs
+docker logs artemis-api
 
-## Development Notes
+# Check if container is running
+docker ps -a
 
-- **In-Memory Storage**: Data is lost on application restart
-- **Sample Data**: Three sample invoices are seeded on startup
-- **Thread Safety**: ConcurrentDictionary ensures thread-safe operations
-- **Logging**: Comprehensive logging for all operations
-- **Swagger UI**: Served at root URL for easy testing
+# Run container interactively to debug
+docker run -it --rm \
+  -v /home/mcquak/projs/dotnet/artemis.svc/certs:/certs:ro \
+  artemis-api:latest \
+  /bin/bash
+```
 
-## Future Enhancements
+**Solutions:**
+1. Verify certificate thumbprint in appsettings.json matches generated certificate
+2. Check PowerShell is installed: `docker exec artemis-api which pwsh`
+3. Verify entrypoint script permissions: `docker exec artemis-api ls -la Install-DockerCertificates.ps1`
+4. Ensure certificate files exist in `/certs/` inside container
 
-- [ ] Database integration (SQL Server, PostgreSQL)
-- [ ] Authentication & Authorization (JWT, OAuth2)
-- [ ] Invoice PDF generation
-- [ ] Email notifications
-- [ ] Advanced filtering and pagination
-- [ ] Audit logging
-- [ ] Docker Compose configuration
-- [ ] Kubernetes deployment manifests
+### Certificate Thumbprint Mismatch
+
+**Symptom:** "Certificate with thumbprint ... not found in store"
+
+**Diagnostic commands:**
+```bash
+# List certificates in My store with thumbprints
+docker exec artemis-api pwsh -Command "Get-ChildItem Cert:\\CurrentUser\\My | Format-List Subject, Thumbprint"
+
+# Check appsettings.json
+docker exec artemis-api cat appsettings.json
+```
+
+**Solutions:**
+1. Run `Setup-Certificates.ps1` to regenerate certificates and update appsettings.json
+2. Manually update thumbprint in appsettings.json (remove spaces and colons)
+3. Restart container after updating configuration: `docker-compose restart`
+
+### PowerShell Scripts Won't Run in Docker
+
+**Symptom:** "pwsh: command not found" or script execution errors
+
+**Diagnostic commands:**
+```bash
+# Check if PowerShell is installed
+docker exec artemis-api which pwsh
+
+# Check PowerShell version
+docker exec artemis-api pwsh -Version
+
+# Test script execution manually
+docker exec artemis-api pwsh -File ./Install-DockerCertificates.ps1
+```
+
+**Solutions:**
+1. Verify PowerShell Core installation in Dockerfile
+2. Check script file permissions: `chmod +x *.ps1`
+3. Ensure script paths are correct in ENTRYPOINT
+4. Run container with `--entrypoint /bin/bash` to debug
+
+### Certificate Files Not Found
+
+**Symptom:** "Cannot find path '/certs/artemis-api.pfx'"
+
+**Diagnostic commands:**
+```bash
+# Check certificate files on host
+ls -la /home/mcquak/projs/dotnet/artemis.svc/certs/
+
+# Check mounted files in container
+docker exec artemis-api ls -la /certs/
+
+# Verify volume mounts
+docker inspect artemis-api | grep -A 10 Mounts
+```
+
+**Solutions:**
+1. Generate certificates on host: `pwsh ./Setup-Certificates.ps1`
+2. Verify volume mount in docker-compose.yml or docker run command
+3. Ensure absolute paths used in volume mounts
+4. Check file permissions allow read access
+
+### SSL Connection Fails from Client
+
+**Symptom:** "SSL connection could not be established" or "certificate verify failed"
+
+**Diagnostic commands:**
+```bash
+# Test with curl (skip validation)
+curl -k -v https://localhost:5001/api/invoices
+
+# Test certificate chain
+openssl s_client -connect localhost:5001 -showcerts
+
+# Check if application is listening on HTTPS
+docker exec artemis-api netstat -tlnp | grep 5001
+```
+
+**Solutions:**
+1. Use `-k` flag with curl to skip certificate validation for self-signed certs
+2. Install CA certificate (`artemis-ca.crt`) in client's trusted root store
+3. Add `artemis-api.local` to `/etc/hosts`: `127.0.0.1 artemis-api.local`
+4. Verify Kestrel is listening on HTTPS port (check logs)
+
+### Certificate Store Directory Not Created
+
+**Symptom:** X509Store operations fail, certificate directory missing
+
+**Diagnostic commands:**
+```bash
+# Check if certificate store directory exists
+docker exec artemis-api ls -la /home/app/.dotnet/corefx/cryptography/
+
+# Check user permissions
+docker exec artemis-api whoami
+docker exec artemis-api ls -ld /home/app/.dotnet
+```
+
+**Solutions:**
+1. Ensure container runs as user with home directory (`app` user)
+2. Create directory manually if needed (X509Store should create it)
+3. Check user has write permissions to home directory
+4. Verify .NET runtime is properly installed
+
+## Security Considerations
+
+1. **Certificate Storage**
+   - Private keys stored in PFX files with proper permissions (600)
+   - Certificate directory mounted read-only in Docker (`:ro`)
+   - Certificates not embedded in Docker images
+
+2. **Certificate Expiration**
+   - Monitor certificate expiration dates
+   - Setup: 2-year server certificate, 5-year CA certificate
+   - Use `Test-CertificateSetup.ps1` to check expiration
+
+3. **Private Key Protection**
+   - PFX files contain private keys (keep secure)
+   - Never commit PFX files to version control (add to `.gitignore`)
+   - Use proper file permissions (600 on Linux)
+
+4. **Container Security**
+   - Container runs as non-root user (`app`, UID 1000)
+   - Certificates installed to user store, not system store
+   - Read-only volume mounts for certificates
+
+5. **Development vs. Production**
+   - This setup is for **development only**
+   - Production should use certificates from trusted CA
+   - Consider using Let's Encrypt or Azure Key Vault for production
+
+6. **Input Validation**
+   - API includes basic input validation
+   - Error responses don't expose sensitive information
+   - HTTPS redirection enabled in production
+
+## Local Development (Without Docker)
+
+You can also run the application locally for development:
+
+### Prerequisites
+- .NET 9.0 SDK
+- PowerShell Core (pwsh)
+- Linux, WSL, or macOS
+
+### Steps
+
+1. **Generate certificates:**
+   ```bash
+   pwsh ./Setup-Certificates.ps1
+   ```
+
+2. **Build the application:**
+   ```bash
+   dotnet build
+   ```
+
+3. **Run the application:**
+   ```bash
+   dotnet run
+   ```
+
+4. **Access the application:**
+   - HTTPS: `https://localhost:5001`
+   - HTTP: `http://localhost:5000`
+   - Swagger: `https://localhost:5001/`
+
+### Certificate Location (Local Development)
+
+Certificates are installed to:
+- `~/.dotnet/corefx/cryptography/x509stores/my/` (server certificate)
+- `~/.dotnet/corefx/cryptography/x509stores/root/` (CA certificate)
+
+## Production Deployment Considerations
+
+This reference implementation focuses on **development environments**. For production:
+
+### Use Trusted CA Certificates
+- Obtain certificates from trusted CA (Let's Encrypt, DigiCert, etc.)
+- Avoid self-signed certificates in production
+- Ensure proper certificate chain validation
+
+### Externalize Certificate Management
+- Use Azure Key Vault, AWS Secrets Manager, or HashiCorp Vault
+- Implement certificate rotation policies
+- Monitor certificate expiration with alerting
+
+### Kubernetes Deployment
+- Use cert-manager for automated certificate management
+- Store certificates in Kubernetes Secrets
+- Use Ingress controllers for TLS termination
+
+### Security Hardening
+- Implement proper authentication and authorization
+- Use HTTPS redirection (enabled by default)
+- Enable HSTS (HTTP Strict Transport Security)
+- Configure proper CORS policies
+- Implement rate limiting and DDoS protection
+
+### Monitoring and Logging
+- Implement structured logging
+- Monitor certificate expiration dates
+- Track SSL/TLS handshake failures
+- Set up health checks and readiness probes
+
+## Reference Documentation
+
+- [ASP.NET Core HTTPS Configuration](https://docs.microsoft.com/en-us/aspnet/core/security/enforcing-ssl)
+- [Kestrel Web Server Configuration](https://docs.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel)
+- [X509Store Class Documentation](https://docs.microsoft.com/en-us/dotnet/api/system.security.cryptography.x509certificates.x509store)
+- [PowerShell Core Documentation](https://docs.microsoft.com/en-us/powershell/scripting/overview)
+- [Docker Volumes](https://docs.docker.com/storage/volumes/)
+
+## Contributing
+
+This is a reference implementation project. If you find issues or have improvements:
+
+1. Test your changes with the provided scripts
+2. Ensure Docker deployment works end-to-end
+3. Update documentation to reflect changes
+4. Test on Linux/WSL environment
 
 ## License
 
@@ -411,4 +928,12 @@ This is a demonstration project for educational purposes.
 
 ## Support
 
-For issues and questions, please refer to the application logs and Swagger documentation.
+For issues and questions:
+- Check the Troubleshooting section above
+- Review application logs: `docker logs artemis-api`
+- Run certificate tests: `pwsh ./Test-CertificateSetup.ps1`
+- Consult the reference documentation links
+
+---
+
+**Remember:** This project demonstrates SSL/TLS certificate configuration for Docker deployments. The invoice API is just a minimal example application to demonstrate the certificate setup in a real-world context.
