@@ -1,24 +1,23 @@
-# Red Hat UBI 8 with ASP.NET Core 9.0 Runtime and PowerShell
+# Red Hat UBI 8 Minimal with ASP.NET Core 9.0 Runtime and PowerShell
 # Corporate requirement: Use Red Hat Universal Base Images (UBI) instead of Microsoft official images
 # This image is used for running ASP.NET Core applications
 #
-# NOTE: Using ubi:latest (not ubi-minimal) because Microsoft's .NET packages require dnf.
-# microdnf in ubi-minimal is incompatible with Microsoft's repository metadata.
+# Using ubi-minimal for smaller image size (~96MB vs ~198MB for full UBI)
+# Microsoft's .NET packages install successfully with microdnf
 
-FROM registry.access.redhat.com/ubi8/ubi:latest
+FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 
 LABEL maintainer="Artemis Development Team"
 LABEL description="Red Hat UBI 8 with ASP.NET Core 9.0 Runtime and PowerShell"
 
 # Install ASP.NET Core 9.0 runtime and PowerShell from Microsoft's official repository for RHEL
 RUN rpm -Uvh https://packages.microsoft.com/config/rhel/8/packages-microsoft-prod.rpm && \
-    dnf install -y \
+    microdnf install -y \
     aspnetcore-runtime-9.0 \
     powershell \
     ca-certificates \
     shadow-utils \
-    && dnf clean all \
-    && rm -rf /var/cache/dnf
+    && microdnf clean all
 
 # Create non-root user for security (artemis:artemis uid:gid 1000:1000)
 RUN useradd -m -u 1000 -U artemis

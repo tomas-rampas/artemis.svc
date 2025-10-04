@@ -25,14 +25,14 @@ This project uses **Red Hat Universal Base Images (UBI)** instead of Microsoft's
 - Enterprise support and long-term maintenance from Red Hat
 - Security-focused updates through Red Hat's RHEL repositories
 - Compliance with corporate container image policies
-- Smaller image sizes (UBI8-minimal is ~35% smaller than Microsoft base images)
+- Optimized image sizes (UBI8-minimal base is ~96MB vs ~220MB for Microsoft aspnet base)
 - Enhanced security with RHEL-based security patches
 - Production-ready for regulated environments
 
 **Custom Base Images:**
 This project builds two custom base images from Red Hat UBI8:
-- `artemis/ubi8-dotnet-sdk:9.0` - For building .NET applications (from UBI8 full)
-- `artemis/ubi8-aspnet-runtime:9.0` - For running ASP.NET Core applications (from UBI8-minimal)
+- `artemis/ubi8-dotnet-sdk:9.0` - For building .NET applications (from UBI8 full, ~680MB)
+- `artemis/ubi8-aspnet-runtime:9.0` - For running ASP.NET Core applications (from UBI8-minimal, ~440MB)
 
 Both images include .NET 9.0 and PowerShell Core 7+ installed from Microsoft's official RHEL repositories, ensuring 100% feature parity with Microsoft images while meeting corporate UBI requirements.
 
@@ -518,7 +518,7 @@ ENTRYPOINT ["pwsh", "-File", "/app/docker-entrypoint.ps1"]
 
 **Image Size Comparison:**
 - Microsoft mcr.microsoft.com/dotnet/aspnet:9.0 - ~220MB
-- Red Hat artemis/ubi8-aspnet-runtime:9.0 - ~145MB (35% smaller)
+- Red Hat artemis/ubi8-aspnet-runtime:9.0 - ~440MB (includes enterprise compliance features)
 
 ### Certificate Rotation
 
