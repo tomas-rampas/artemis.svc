@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  artemis-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: artemis-invoicing-api
+    ports:
+      - "5000:5000"
+      - "5001:5001"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5000;https://+:5001
+      # Certificate configuration - populated by setup-certificates.sh
+      - CertificateSettings__Thumbprint=${CERT_THUMBPRINT:-}
+      - CertificateSettings__StoreName=My
+      - CertificateSettings__StoreLocation=CurrentUser
+    volumes:
+      # Certificate stores - mounted from ./certs/docker/ created by setup-certificates.sh
+      # These follow Microsoft's .NET certificate store structure for Linux
+      - ./certs/docker/my:/certs/my:ro
+      - ./certs/docker/root:/certs/root:ro
+      # Application logs
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - artemis-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/invoices", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  artemis-network:
+    driver: bridge

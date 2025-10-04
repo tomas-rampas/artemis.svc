@@ -1,0 +1,149 @@
+=== Artemis Project Cleanup Report ===
+Date: 2025-10-04 10:32:52 UTC
+Cleanup Type: PowerShell-Primary (Option A)
+
+=======================================================
+FILES REMOVED
+=======================================================
+
+Obsolete Shell Scripts (4 files):
+- setup-certificates.sh
+- docker-entrypoint.sh
+- test-certificates.sh
+- setup-certificate.ps1
+
+Redundant Documentation (6 files):
+- POWERSHELL-CERTIFICATE-SETUP.md
+- CERTIFICATE-SETUP.md
+- CERTIFICATE-IMPLEMENTATION-SUMMARY.md
+- QUICK-START-CERTIFICATES.md
+- PROJECT-SUMMARY.md
+- PROJECT-FILES.md
+
+Backup Configuration (1 file):
+- appsettings.json.backup
+
+Old Certificate Backups (5 directories):
+- certs/backup/20251003_193950
+- certs/backup/20251003_194429
+- certs/backup/20251004_084448
+- certs/backup/20251004_084702
+- certs/backup/20251004-091146
+
+Total Items Removed: 16 (11 files + 5 directories)
+
+=======================================================
+FILES KEPT
+=======================================================
+
+PowerShell Scripts (3 files):
+- Setup-Certificates.ps1
+- Install-DockerCertificates.ps1
+- Test-CertificateSetup.ps1
+
+Documentation (2 files):
+- README.md (updated with Scripts section)
+- QUICKSTART.md
+
+Certificate Backups Retained (2 most recent):
+- certs/backup/20251004-101111
+- certs/backup/20251004-101252
+
+=======================================================
+CONFIGURATION UPDATES
+=======================================================
+
+Dockerfile:
+- Removed docker-entrypoint.sh copy and chmod commands
+- Changed ENTRYPOINT from ["/app/docker-entrypoint.sh"] to ["dotnet", "artemis.svc.dll"]
+- Simplified container startup to direct execution
+
+README.md:
+- Added new "Scripts" section documenting PowerShell scripts
+- Listed all three certificate management scripts with descriptions
+- Added reference to QUICKSTART.md for usage instructions
+
+=======================================================
+VERIFICATION RESULTS
+=======================================================
+
+Build Verification:
+✓ dotnet build - SUCCESS (0 warnings, 0 errors)
+✓ Time elapsed: 1.59 seconds
+
+Docker Build Verification:
+⚠ Docker daemon not running - Dockerfile syntax valid
+
+PowerShell Scripts Verification:
+✓ Setup-Certificates.ps1 - EXISTS, SYNTAX VALID
+✓ Install-DockerCertificates.ps1 - EXISTS, SYNTAX VALID
+✓ Test-CertificateSetup.ps1 - EXISTS, SYNTAX VALID
+
+=======================================================
+BACKUP LOCATION
+=======================================================
+
+All removed files backed up to:
+/tmp/artemis-cleanup-backup-20251004-102818
+
+Backup Contents:
+- 4 shell scripts
+- 6 markdown documentation files
+- 1 configuration backup file
+- 5 certificate backup directories (with full contents)
+
+=======================================================
+IMPACT SUMMARY
+=======================================================
+
+File Count Reduction:
+- Before: ~32 files in project root
+- After: ~21 files in project root
+- Reduction: ~34% fewer files
+
+Documentation Consolidation:
+- Before: 8 markdown files
+- After: 2 markdown files (README.md, QUICKSTART.md)
+- Reduction: 75% fewer documentation files
+
+Script Consolidation:
+- Before: 7 scripts (4 shell + 3 PowerShell)
+- After: 3 PowerShell scripts
+- Reduction: PowerShell-only toolchain (100% consistent)
+
+Certificate Backup Cleanup:
+- Before: 7 backup directories
+- After: 2 most recent backups
+- Reduction: 71% fewer backup directories
+
+=======================================================
+PROJECT STATUS
+=======================================================
+
+✓ Clean PowerShell-primary toolchain established
+✓ Consolidated documentation (2 essential files)
+✓ Build process validated and working
+✓ Dockerfile updated to remove shell script dependency
+✓ README.md enhanced with Scripts section
+✓ All removed files safely backed up
+✓ Certificate backups pruned to 2 most recent
+✓ Project structure simplified and maintainable
+
+=======================================================
+NEXT STEPS
+=======================================================
+
+1. Test Docker build when Docker daemon is available:
+   docker-compose build
+
+2. Verify PowerShell scripts work correctly:
+   pwsh ./Setup-Certificates.ps1
+
+3. Review QUICKSTART.md for updated usage instructions
+
+4. Remove backup directory when confident:
+   rm -rf /tmp/artemis-cleanup-backup-20251004-102818
+
+=======================================================
+CLEANUP COMPLETED SUCCESSFULLY
+=======================================================
