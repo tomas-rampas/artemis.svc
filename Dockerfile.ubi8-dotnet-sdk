@@ -1,0 +1,41 @@
+# Red Hat UBI 8 with .NET 9.0 SDK
+# Corporate requirement: Use Red Hat Universal Base Images (UBI) instead of Microsoft official images
+# This image is used for building .NET applications
+
+FROM registry.access.redhat.com/ubi8/ubi:latest
+
+LABEL maintainer="Artemis Development Team"
+LABEL description="Red Hat UBI 8 with .NET 9.0 SDK for building applications"
+
+# Install .NET 9.0 SDK from Microsoft's official repository for RHEL
+RUN rpm -Uvh https://packages.microsoft.com/config/rhel/8/packages-microsoft-prod.rpm && \
+    dnf install -y dotnet-sdk-9.0 && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf
+
+# Install build tools commonly needed for .NET projects
+RUN dnf install -y \
+    git \
+    tar \
+    gzip \
+    unzip \
+    which \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+# Set .NET environment variables to improve build performance
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+    DOTNET_NOLOGO=1 \
+    DOTNET_GENERATE_ASPNET_CERTIFICATE=false
+
+# Set working directory
+WORKDIR /src
+
+# Verify .NET SDK installation
+RUN dotnet --version && \
+    dotnet --list-sdks && \
+    echo ".NET SDK installation verified successfully"
+
+# Default command
+CMD ["/bin/bash"]

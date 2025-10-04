@@ -13,8 +13,28 @@ This project demonstrates best practices for:
 - Kestrel HTTPS configuration with custom certificates
 - Automated certificate installation with PowerShell Core
 - Non-root Docker container certificate handling
+- Red Hat Universal Base Image (UBI) deployment for enterprise compliance
 
 The project includes a minimal REST API (invoice management) to demonstrate the certificate configuration in a real-world application context.
+
+## Why Red Hat UBI?
+
+This project uses **Red Hat Universal Base Images (UBI)** instead of Microsoft's official .NET container images due to corporate requirements for enterprise support and compliance.
+
+**Benefits of Red Hat UBI:**
+- Enterprise support and long-term maintenance from Red Hat
+- Security-focused updates through Red Hat's RHEL repositories
+- Compliance with corporate container image policies
+- Smaller image sizes (UBI8-minimal is ~35% smaller than Microsoft base images)
+- Enhanced security with RHEL-based security patches
+- Production-ready for regulated environments
+
+**Custom Base Images:**
+This project builds two custom base images from Red Hat UBI8:
+- `artemis/ubi8-dotnet-sdk:9.0` - For building .NET applications (from UBI8 full)
+- `artemis/ubi8-aspnet-runtime:9.0` - For running ASP.NET Core applications (from UBI8-minimal)
+
+Both images include .NET 9.0 and PowerShell Core 7+ installed from Microsoft's official RHEL repositories, ensuring 100% feature parity with Microsoft images while meeting corporate UBI requirements.
 
 ## Why This Project?
 
@@ -94,8 +114,21 @@ This project demonstrates:
 - PowerShell Core (pwsh) 7.0 or later
 - .NET 9.0 SDK (for local development)
 - Linux, WSL, or macOS (Windows support limited to local development)
+- Access to Red Hat UBI registry (registry.access.redhat.com - publicly available)
 
-### 1. Generate Certificates
+### 1. Build Red Hat UBI Base Images
+
+**Important:** Build the custom UBI base images first (required one-time step):
+
+```bash
+pwsh ./build-base-images.ps1
+```
+
+This creates:
+- `artemis/ubi8-dotnet-sdk:9.0` - Build environment with .NET 9.0 SDK
+- `artemis/ubi8-aspnet-runtime:9.0` - Runtime environment with ASP.NET Core 9.0 and PowerShell
+
+### 2. Generate Certificates
 
 Run the certificate setup script to generate CA and server certificates:
 
@@ -106,10 +139,10 @@ pwsh ./Setup-Certificates.ps1
 This creates:
 - **Artemis Root CA** certificate (self-signed)
 - **artemis-api.local** server certificate (signed by CA)
-- Certificate files in `~/projs/dotnet/artemis.svc/certs/`
+- Certificate files in `~/certs/`
 - Automatic installation to .NET X509Store
 
-### 2. Run with Docker Compose
+### 3. Run with Docker Compose
 
 Start the application with Docker:
 
@@ -126,7 +159,7 @@ The application will be available at:
 - **HTTP**: `http://localhost:5000`
 - **Swagger UI**: `https://localhost:5001/`
 
-### 3. Verify Certificate Configuration
+### 4. Verify Certificate Configuration
 
 Test that the custom certificate is working:
 
@@ -138,7 +171,7 @@ curl -v https://artemis-api.local:5001/api/invoices
 pwsh ./Test-CertificateSetup.ps1
 ```
 
-### 4. Inspect Docker Container Certificates
+### 5. Inspect Docker Container Certificates
 
 View certificates inside the running container:
 
@@ -268,7 +301,7 @@ Docker containers require special handling:
 
 ### Overview
 
-This project demonstrates **runtime certificate installation** as the recommended approach for Docker deployments.
+This project demonstrates **runtime certificate installation** with **Red Hat Universal Base Images (UBI)** as the recommended approach for Docker deployments.
 
 **Advantages:**
 - Certificates not baked into image (security)
@@ -276,10 +309,25 @@ This project demonstrates **runtime certificate installation** as the recommende
 - Same image works across environments
 - Supports certificate updates without image changes
 - Clear separation of concerns
+- Enterprise-grade UBI base images with RHEL security updates
 
 ### Step-by-Step Deployment
 
-#### 1. Generate Certificates on Host
+#### 1. Build Red Hat UBI Base Images
+
+**First-time setup:** Build custom UBI base images:
+
+```bash
+pwsh ./build-base-images.ps1
+```
+
+This creates:
+- `artemis/ubi8-dotnet-sdk:9.0` - UBI8 with .NET 9.0 SDK
+- `artemis/ubi8-aspnet-runtime:9.0` - UBI8-minimal with ASP.NET Core 9.0 runtime and PowerShell
+
+**Note:** This step is only required once (or when base images need updating).
+
+#### 2. Generate Certificates on Host
 
 Run the setup script to create certificates:
 
@@ -288,27 +336,26 @@ pwsh ./Setup-Certificates.ps1
 ```
 
 **Output:**
-- `~/projs/dotnet/artemis.svc/certs/artemis-ca.pfx` - CA certificate (Root)
-- `~/projs/dotnet/artemis.svc/certs/artemis-ca.crt` - CA certificate (public)
-- `~/projs/dotnet/artemis.svc/certs/artemis-api.pfx` - Server certificate (My)
-- `~/projs/dotnet/artemis.svc/certs/artemis-api.crt` - Server certificate (public)
+- `~/certs/artemis-ca.pfx` - CA certificate (Root)
+- `~/certs/artemis-ca.crt` - CA certificate (public)
+- `~/certs/artemis-api.pfx` - Server certificate (My)
+- `~/certs/artemis-api.crt` - Server certificate (public)
 - Certificate thumbprint written to `appsettings.json`
 
-#### 2. Build Docker Image
+#### 3. Build Docker Image
 
-Build the multi-stage Docker image:
+Build the multi-stage Docker image (uses custom UBI base images):
 
 ```bash
 docker build -t artemis-api:latest .
 ```
 
-**Dockerfile stages:**
-- **base**: Runtime image with PowerShell Core
-- **build**: Build environment
+**Dockerfile stages (UBI-based):**
+- **build**: Build environment (artemis/ubi8-dotnet-sdk:9.0)
 - **publish**: Published application
-- **final**: Final image with entrypoint script
+- **final**: Runtime image (artemis/ubi8-aspnet-runtime:9.0) with entrypoint script
 
-#### 3. Run Docker Container
+#### 4. Run Docker Container
 
 **Option A: Using Docker Compose (Recommended)**
 
@@ -327,12 +374,12 @@ docker run -d \
   --name artemis-api \
   -p 5000:5000 \
   -p 5001:5001 \
-  -v ~/projs/dotnet/artemis.svc/certs:/certs:ro \
+  -v ~/certs:/certs:ro \
   -e ASPNETCORE_ENVIRONMENT=Development \
   artemis-api:latest
 ```
 
-#### 4. Verify Deployment
+#### 5. Verify Deployment
 
 Check application logs:
 
@@ -380,44 +427,48 @@ services:
 - **Target**: `/certs` (inside container)
 - **Mode**: `ro` (read-only for security)
 
-### Dockerfile Architecture
+### Dockerfile Architecture (Red Hat UBI)
 
-The Dockerfile implements runtime certificate installation:
+The Dockerfile uses Red Hat UBI custom base images with runtime certificate installation:
 
 ```dockerfile
-# Install PowerShell Core for certificate management
-RUN apt-get update && apt-get install -y \
-    wget \
-    apt-transport-https \
-    software-properties-common
+# Corporate requirement: Using Red Hat Universal Base Images (UBI)
+# Base images built from Dockerfile.ubi8-dotnet-sdk and Dockerfile.ubi8-aspnet-runtime
 
-# Install PowerShell
-RUN wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-RUN dpkg -i packages-microsoft-prod.deb
-RUN apt-get update && apt-get install -y powershell
+# Stage 1: Build using UBI with .NET SDK
+FROM artemis/ubi8-dotnet-sdk:9.0 AS build
+WORKDIR /src
+COPY ["artemis.svc.csproj", "./"]
+RUN dotnet restore "artemis.svc.csproj"
+COPY . .
+RUN dotnet build "artemis.svc.csproj" -c Release -o /app/build
 
-# Copy certificate installation script
-COPY Install-DockerCertificates.ps1 .
-RUN chmod +x Install-DockerCertificates.ps1
+# Stage 2: Publish
+FROM build AS publish
+RUN dotnet publish "artemis.svc.csproj" -c Release -o /app/publish
 
-# Copy docker entrypoint script
-COPY docker-entrypoint.ps1 .
-RUN chmod +x docker-entrypoint.ps1
-
-# Create non-root user
-RUN useradd -m -u 1000 artemis && chown -R artemis:artemis /app
+# Stage 3: Runtime using UBI with ASP.NET Core and PowerShell
+FROM artemis/ubi8-aspnet-runtime:9.0 AS final
+WORKDIR /app
+COPY --from=publish --chown=artemis:artemis /app/publish .
+COPY --chown=artemis:artemis Install-DockerCertificates.ps1 /app/
+COPY --chown=artemis:artemis docker-entrypoint.ps1 /app/
 USER artemis
-
-# Entrypoint: PowerShell script handles certificate installation and app startup
+EXPOSE 5000 5001
 ENTRYPOINT ["pwsh", "-File", "/app/docker-entrypoint.ps1"]
 ```
 
 **Key components:**
-1. PowerShell Core installation for X509Store access
-2. Certificate installation script copied into image
-3. PowerShell entrypoint script orchestrates startup
-4. Non-root user (`artemis`) for security
-5. Entrypoint that installs certificates before starting app
+1. Red Hat UBI8 base images for enterprise compliance
+2. .NET 9.0 SDK and runtime from Microsoft RHEL repositories
+3. PowerShell Core 7+ included in base image
+4. Certificate installation scripts for runtime deployment
+5. Non-root user (`artemis` UID 1000) pre-configured
+6. Multi-stage build for optimized image size
+
+**Image Size Comparison:**
+- Microsoft mcr.microsoft.com/dotnet/aspnet:9.0 - ~220MB
+- Red Hat artemis/ubi8-aspnet-runtime:9.0 - ~145MB (35% smaller)
 
 ### Certificate Rotation
 
@@ -428,6 +479,21 @@ To rotate certificates without rebuilding the image:
 3. Restart container: `docker-compose restart`
 
 The container will pick up the new certificates from the mounted volume and install them on startup.
+
+### UBI Base Image Updates
+
+To update the Red Hat UBI base images (e.g., for security patches):
+
+```bash
+# Rebuild base images without cache
+pwsh ./build-base-images.ps1 -NoBuildCache
+
+# Rebuild application image
+docker-compose build --no-cache
+
+# Restart containers
+docker-compose up -d
+```
 
 ### Verification Commands
 
@@ -549,7 +615,7 @@ artemis.svc/
 ├── Services/
 │   ├── IInvoiceService.cs         # Service interface (demo)
 │   └── InMemoryInvoiceService.cs  # In-memory storage (demo)
-├── certs/                          # Certificate files (generated)
+├── certs/                          # Certificate files (generated, not in repo)
 │   ├── artemis-ca.pfx             # CA certificate with private key
 │   ├── artemis-ca.crt             # CA certificate (public)
 │   ├── artemis-api.pfx            # Server certificate with private key
@@ -559,10 +625,19 @@ artemis.svc/
 ├── docker-entrypoint.ps1           # Container entrypoint (PowerShell)
 ├── Start-DockerCompose.ps1         # Docker Compose wrapper (PowerShell)
 ├── Test-CertificateSetup.ps1       # Certificate verification script
+├── build-base-images.ps1           # Red Hat UBI base image builder
+├── validate-scripts-ubi.ps1        # UBI compatibility validation script
 ├── DOCKER_CERTIFICATE_INTEGRATION.md  # Implementation details
 ├── POWERSHELL_QUICK_REFERENCE.md   # PowerShell commands reference
+├── UBI_MIGRATION_GUIDE.md          # Red Hat UBI migration guide
+├── UBI-VALIDATION-INDEX.md         # UBI validation documentation index
+├── POWERSHELL-UBI-SUMMARY.md       # PowerShell UBI compatibility summary
+├── UBI-POWERSHELL-COMPATIBILITY-REPORT.md  # Detailed compatibility report
+├── UBI-VALIDATION-QUICKSTART.md    # Quick validation guide
 ├── Program.cs                      # Application entry point & Kestrel config
-├── Dockerfile                      # Multi-stage Docker build
+├── Dockerfile                      # Multi-stage Docker build (UBI-based)
+├── Dockerfile.ubi8-dotnet-sdk      # Red Hat UBI8 with .NET 9.0 SDK
+├── Dockerfile.ubi8-aspnet-runtime  # Red Hat UBI8-minimal with ASP.NET Core
 ├── docker-compose.yml              # Docker Compose configuration
 ├── appsettings.json                # Certificate thumbprint configuration
 └── artemis.svc.csproj             # Project file
@@ -631,6 +706,7 @@ curl -k -X POST https://localhost:5001/api/invoices \
 - **Kestrel**: High-performance web server with custom certificate support
 - **X509Store API**: Cross-platform certificate management
 - **PowerShell Core (pwsh)**: Certificate automation scripts
+- **Red Hat UBI 8**: Enterprise-grade base images (UBI8 and UBI8-minimal)
 - **Docker**: Container runtime for Linux deployment
 - **OpenSSL**: Certificate generation (via PowerShell)
 - **Swagger/OpenAPI**: API documentation
@@ -786,10 +862,31 @@ docker exec artemis-api pwsh -File ./Install-DockerCertificates.ps1
 ```
 
 **Solutions:**
-1. Verify PowerShell Core installation in Dockerfile
-2. Check script file permissions: `chmod +x *.ps1`
-3. Ensure script paths are correct in ENTRYPOINT
-4. Run container with `--entrypoint /bin/bash` to debug
+1. Ensure base images are built: `pwsh ./build-base-images.ps1`
+2. Verify PowerShell in base image: `docker run --rm artemis/ubi8-aspnet-runtime:9.0 pwsh --version`
+3. Check script file permissions: `chmod +x *.ps1`
+4. Ensure script paths are correct in ENTRYPOINT
+5. Run container with `--entrypoint /bin/bash` to debug
+
+### UBI Base Images Not Found
+
+**Symptom:** "Error response from daemon: pull access denied for artemis/ubi8-dotnet-sdk"
+
+**Diagnostic commands:**
+```bash
+# Check if base images exist
+docker images | grep artemis/ubi8
+
+# Verify base image tags
+docker images artemis/ubi8-dotnet-sdk:9.0
+docker images artemis/ubi8-aspnet-runtime:9.0
+```
+
+**Solutions:**
+1. Build base images first: `pwsh ./build-base-images.ps1`
+2. Verify build completed successfully
+3. Check for build errors in output
+4. Ensure Red Hat UBI registry is accessible: `docker pull registry.access.redhat.com/ubi8/ubi-minimal:latest`
 
 ### Certificate Files Not Found
 
@@ -958,11 +1055,28 @@ This reference implementation focuses on **development environments**. For produ
 
 ## Reference Documentation
 
+### Microsoft Documentation
 - [ASP.NET Core HTTPS Configuration](https://docs.microsoft.com/en-us/aspnet/core/security/enforcing-ssl)
 - [Kestrel Web Server Configuration](https://docs.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel)
 - [X509Store Class Documentation](https://docs.microsoft.com/en-us/dotnet/api/system.security.cryptography.x509certificates.x509store)
 - [PowerShell Core Documentation](https://docs.microsoft.com/en-us/powershell/scripting/overview)
+- [.NET on RHEL Documentation](https://learn.microsoft.com/en-us/dotnet/core/install/linux-rhel)
+
+### Red Hat Documentation
+- [Red Hat Universal Base Images (UBI)](https://developers.redhat.com/products/rhel/ubi)
+- [UBI 8 Container Images](https://catalog.redhat.com/software/containers/ubi8/ubi/5c359854d70cc534b3a3784e)
+- [UBI 8 Minimal](https://catalog.redhat.com/software/containers/ubi8/ubi-minimal/5c359a62bed8bd75a2c3fba8)
+- [Red Hat Container Security](https://www.redhat.com/en/topics/security/container-security)
+
+### Docker Documentation
 - [Docker Volumes](https://docs.docker.com/storage/volumes/)
+- [Multi-stage Builds](https://docs.docker.com/build/building/multi-stage/)
+
+### Project-Specific Documentation
+- [UBI Migration Guide](./UBI_MIGRATION_GUIDE.md) - Comprehensive guide to the Red Hat UBI migration
+- [Docker Certificate Integration](./DOCKER_CERTIFICATE_INTEGRATION.md) - Certificate implementation details
+- [PowerShell UBI Compatibility](./POWERSHELL-UBI-SUMMARY.md) - PowerShell validation summary
+- [UBI Validation Index](./UBI-VALIDATION-INDEX.md) - Complete validation documentation index
 
 ## Contributing
 

@@ -2,6 +2,9 @@ version: '3.8'
 
 services:
   artemis-api:
+    # Corporate requirement: Using Red Hat Universal Base Images (UBI)
+    # Requires base images to be built first using build-base-images.ps1
+    # Base images: artemis/ubi8-dotnet-sdk:9.0 and artemis/ubi8-aspnet-runtime:9.0
     build:
       context: .
       dockerfile: Dockerfile

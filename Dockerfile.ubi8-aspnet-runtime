@@ -1,0 +1,59 @@
+# Red Hat UBI 8 Minimal with ASP.NET Core 9.0 Runtime and PowerShell
+# Corporate requirement: Use Red Hat Universal Base Images (UBI) instead of Microsoft official images
+# This image is used for running ASP.NET Core applications
+
+FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
+
+LABEL maintainer="Artemis Development Team"
+LABEL description="Red Hat UBI 8 Minimal with ASP.NET Core 9.0 Runtime and PowerShell"
+
+# Install ASP.NET Core 9.0 runtime and PowerShell from Microsoft's official repository for RHEL
+RUN microdnf install -y \
+    shadow-utils \
+    ca-certificates \
+    && rpm -Uvh https://packages.microsoft.com/config/rhel/8/packages-microsoft-prod.rpm \
+    && microdnf install -y \
+    aspnetcore-runtime-9.0 \
+    powershell \
+    && microdnf clean all \
+    && rm -rf /var/cache/yum
+
+# Create non-root user for security (artemis:artemis uid:gid 1000:1000)
+RUN useradd -m -u 1000 -U artemis
+
+# Create application directory
+RUN mkdir -p /app && chown -R artemis:artemis /app
+
+# Create .NET certificate store directories (per Microsoft documentation)
+# https://learn.microsoft.com/en-us/dotnet/standard/security/cross-platform-cryptography#x509store
+# These directories are used by .NET's X509Store for certificate management
+RUN mkdir -p /home/artemis/.dotnet/corefx/cryptography/x509stores/my && \
+    mkdir -p /home/artemis/.dotnet/corefx/cryptography/x509stores/root && \
+    mkdir -p /home/artemis/.dotnet/corefx/cryptography/x509stores/ca && \
+    chown -R artemis:artemis /home/artemis/.dotnet
+
+# Create certificate mount points for Docker volume mapping
+# These paths match the Install-DockerCertificates.ps1 script expectations:
+# - /app/certs/docker/my: Client/server certificates (X509Store My/CurrentUser)
+# - /app/certs/docker/root: Trusted root CA certificates (X509Store Root/CurrentUser)
+# - /app/certs/server: Server certificate PFX files for HTTPS
+RUN mkdir -p /app/certs/docker/my \
+             /app/certs/docker/root \
+             /app/certs/server && \
+    chown -R artemis:artemis /app/certs
+
+# Set .NET environment variables
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_RUNNING_IN_CONTAINER=true \
+    ASPNETCORE_URLS="http://+:5000;https://+:5001"
+
+# Set working directory
+WORKDIR /app
+
+# Verify installations
+RUN dotnet --version && \
+    pwsh --version && \
+    echo "ASP.NET Core runtime and PowerShell installation verified successfully"
+
+# Default command
+CMD ["/bin/bash"]
