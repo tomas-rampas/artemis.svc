@@ -1,22 +1,24 @@
-# Red Hat UBI 8 Minimal with ASP.NET Core 9.0 Runtime and PowerShell
+# Red Hat UBI 8 with ASP.NET Core 9.0 Runtime and PowerShell
 # Corporate requirement: Use Red Hat Universal Base Images (UBI) instead of Microsoft official images
 # This image is used for running ASP.NET Core applications
+#
+# NOTE: Using ubi:latest (not ubi-minimal) because Microsoft's .NET packages require dnf.
+# microdnf in ubi-minimal is incompatible with Microsoft's repository metadata.
 
-FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
+FROM registry.access.redhat.com/ubi8/ubi:latest
 
 LABEL maintainer="Artemis Development Team"
-LABEL description="Red Hat UBI 8 Minimal with ASP.NET Core 9.0 Runtime and PowerShell"
+LABEL description="Red Hat UBI 8 with ASP.NET Core 9.0 Runtime and PowerShell"
 
 # Install ASP.NET Core 9.0 runtime and PowerShell from Microsoft's official repository for RHEL
-RUN microdnf install -y \
-    shadow-utils \
-    ca-certificates \
-    && rpm -Uvh https://packages.microsoft.com/config/rhel/8/packages-microsoft-prod.rpm \
-    && microdnf install -y \
+RUN rpm -Uvh https://packages.microsoft.com/config/rhel/8/packages-microsoft-prod.rpm && \
+    dnf install -y \
     aspnetcore-runtime-9.0 \
     powershell \
-    && microdnf clean all \
-    && rm -rf /var/cache/yum
+    ca-certificates \
+    shadow-utils \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
 
 # Create non-root user for security (artemis:artemis uid:gid 1000:1000)
 RUN useradd -m -u 1000 -U artemis
@@ -51,7 +53,8 @@ ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
 WORKDIR /app
 
 # Verify installations
-RUN dotnet --version && \
+# Note: 'dotnet --version' requires SDK. For runtime-only, we check the binary and list runtimes.
+RUN dotnet --list-runtimes && \
     pwsh --version && \
     echo "ASP.NET Core runtime and PowerShell installation verified successfully"
 

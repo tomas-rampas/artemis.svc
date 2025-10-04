@@ -192,9 +192,11 @@ try {
 
     if (-not $BuildSdkOnly) {
         Write-Info "Verifying runtime image..."
-        $runtimeDotnetVersion = docker run --rm artemis/ubi8-aspnet-runtime:9.0 dotnet --version
+        # Note: Runtime images don't have SDK, so we use --list-runtimes instead of --version
+        $runtimeDotnetVersion = docker run --rm artemis/ubi8-aspnet-runtime:9.0 dotnet --list-runtimes
         if ($LASTEXITCODE -eq 0) {
-            Write-Success "Runtime .NET version: $runtimeDotnetVersion"
+            Write-Success "Runtime .NET runtimes installed:"
+            Write-Host $runtimeDotnetVersion
         } else {
             Write-Warning "Could not verify runtime .NET version"
         }
