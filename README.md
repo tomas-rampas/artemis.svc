@@ -1139,7 +1139,11 @@ This is a reference implementation project. If you find issues or have improveme
 
 ## License
 
-This is a demonstration project for educational purposes.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+This is an open source educational project designed to help developers understand SSL/TLS certificate configuration for ASP.NET Core applications in Docker containers. You are free to use, modify, and distribute this code for both personal and commercial purposes.
+
+Contributions, improvements, and feedback are welcome and encouraged.
 
 ## Support
 
