@@ -170,4 +170,5 @@ secrets.json
 docker-compose.override.yml
 
 .fake
-.serena
+.serena/
+.claude/
