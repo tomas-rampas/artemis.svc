@@ -113,7 +113,11 @@ This creates:
 
 Start the application with Docker:
 
-```bash
+```powershell
+# Using PowerShell wrapper (recommended)
+pwsh ./Start-DockerCompose.ps1
+
+# Or using docker-compose directly
 docker-compose up --build
 ```
 
@@ -146,8 +150,40 @@ docker exec artemis-api pwsh -Command "Get-ChildItem Cert:\\CurrentUser\\My"
 docker exec artemis-api pwsh -Command "Get-ChildItem Cert:\\CurrentUser\\Root"
 
 # View .NET certificate store directory structure
-docker exec artemis-api ls -la /home/app/.dotnet/corefx/cryptography/x509stores/
+docker exec artemis-api ls -la /home/artemis/.dotnet/corefx/cryptography/x509stores/
 ```
+
+## PowerShell Scripts (Cross-Platform)
+
+All automation scripts use **PowerShell Core (pwsh)** for cross-platform compatibility:
+
+### Start-DockerCompose.ps1
+Wrapper script for Docker Compose with automatic certificate management:
+```powershell
+# Start containers (reads certificate files automatically)
+pwsh ./Start-DockerCompose.ps1
+
+# Build images
+pwsh ./Start-DockerCompose.ps1 -Command build
+
+# View logs
+pwsh ./Start-DockerCompose.ps1 -Command logs
+
+# Stop containers
+pwsh ./Start-DockerCompose.ps1 -Command down
+```
+
+### docker-entrypoint.ps1
+Container startup script that:
+- Validates PowerShell availability
+- Runs Install-DockerCertificates.ps1
+- Starts the .NET application
+
+**Platform Support:**
+- ✅ Windows (PowerShell 7+)
+- ✅ Linux (PowerShell 7+)
+- ✅ macOS (PowerShell 7+)
+- ✅ Docker (Debian with PowerShell)
 
 ## Certificate Architecture on Linux
 
@@ -165,8 +201,8 @@ $HOME/.dotnet/corefx/cryptography/x509stores/
 └── ca/            # Intermediate CA certificates
 ```
 
-For the Docker container (running as `app` user):
-- Store path: `/home/app/.dotnet/corefx/cryptography/x509stores/`
+For the Docker container (running as `artemis` user):
+- Store path: `/home/artemis/.dotnet/corefx/cryptography/x509stores/`
 
 For WSL/Linux development:
 - Store path: `~/.dotnet/corefx/cryptography/x509stores/`
@@ -212,19 +248,21 @@ Docker containers require special handling:
    - Target: `/certs/` (inside container)
 
 2. **Installation script run during container startup**
-   - `Install-DockerCertificates.ps1` executed in ENTRYPOINT
+   - `docker-entrypoint.ps1` executed as ENTRYPOINT
+   - Calls `Install-DockerCertificates.ps1` for certificate installation
    - Installs CA to Root store
    - Installs server certificate to My store
+   - Starts the .NET application
 
 3. **Proper file permissions**
    - PFX files: 600 (read/write for owner only)
    - CRT files: 644 (read for all)
-   - Owner: `app` user (non-root)
+   - Owner: `artemis` user (non-root)
 
 4. **Non-root user access**
-   - Container runs as `app` user (UID 1000)
-   - Certificate store: `/home/app/.dotnet/corefx/cryptography/x509stores/`
-   - PowerShell scripts run as `app` user
+   - Container runs as `artemis` user (UID 1000)
+   - Certificate store: `/home/artemis/.dotnet/corefx/cryptography/x509stores/`
+   - PowerShell scripts run as `artemis` user
 
 ## Docker Deployment Guide
 
@@ -274,7 +312,11 @@ docker build -t artemis-api:latest .
 
 **Option A: Using Docker Compose (Recommended)**
 
-```bash
+```powershell
+# Using PowerShell wrapper
+pwsh ./Start-DockerCompose.ps1
+
+# Or using docker-compose directly
 docker-compose up -d
 ```
 
@@ -358,19 +400,24 @@ RUN apt-get update && apt-get install -y powershell
 COPY Install-DockerCertificates.ps1 .
 RUN chmod +x Install-DockerCertificates.ps1
 
-# Create non-root user
-RUN useradd -m -u 1000 app && chown -R app:app /app
-USER app
+# Copy docker entrypoint script
+COPY docker-entrypoint.ps1 .
+RUN chmod +x docker-entrypoint.ps1
 
-# Entrypoint: Install certificates, then start app
-ENTRYPOINT ["sh", "-c", "pwsh ./Install-DockerCertificates.ps1 && exec dotnet artemis.svc.dll"]
+# Create non-root user
+RUN useradd -m -u 1000 artemis && chown -R artemis:artemis /app
+USER artemis
+
+# Entrypoint: PowerShell script handles certificate installation and app startup
+ENTRYPOINT ["pwsh", "-File", "/app/docker-entrypoint.ps1"]
 ```
 
 **Key components:**
 1. PowerShell Core installation for X509Store access
 2. Certificate installation script copied into image
-3. Non-root user (`app`) for security
-4. Entrypoint that installs certificates before starting app
+3. PowerShell entrypoint script orchestrates startup
+4. Non-root user (`artemis`) for security
+5. Entrypoint that installs certificates before starting app
 
 ### Certificate Rotation
 
@@ -400,7 +447,7 @@ docker exec artemis-api pwsh ./Test-CertificateSetup.ps1
 docker exec artemis-api ls -la /certs
 
 # View certificate store directory
-docker exec artemis-api ls -la /home/app/.dotnet/corefx/cryptography/x509stores/
+docker exec artemis-api ls -la /home/artemis/.dotnet/corefx/cryptography/x509stores/
 ```
 
 ## Scripts
@@ -509,7 +556,11 @@ artemis.svc/
 │   └── artemis-api.crt            # Server certificate (public)
 ├── Setup-Certificates.ps1          # Certificate generation script
 ├── Install-DockerCertificates.ps1  # Docker certificate installer
+├── docker-entrypoint.ps1           # Container entrypoint (PowerShell)
+├── Start-DockerCompose.ps1         # Docker Compose wrapper (PowerShell)
 ├── Test-CertificateSetup.ps1       # Certificate verification script
+├── DOCKER_CERTIFICATE_INTEGRATION.md  # Implementation details
+├── POWERSHELL_QUICK_REFERENCE.md   # PowerShell commands reference
 ├── Program.cs                      # Application entry point & Kestrel config
 ├── Dockerfile                      # Multi-stage Docker build
 ├── docker-compose.yml              # Docker Compose configuration
@@ -791,15 +842,15 @@ docker exec artemis-api netstat -tlnp | grep 5001
 **Diagnostic commands:**
 ```bash
 # Check if certificate store directory exists
-docker exec artemis-api ls -la /home/app/.dotnet/corefx/cryptography/
+docker exec artemis-api ls -la /home/artemis/.dotnet/corefx/cryptography/
 
 # Check user permissions
 docker exec artemis-api whoami
-docker exec artemis-api ls -ld /home/app/.dotnet
+docker exec artemis-api ls -ld /home/artemis/.dotnet
 ```
 
 **Solutions:**
-1. Ensure container runs as user with home directory (`app` user)
+1. Ensure container runs as user with home directory (`artemis` user)
 2. Create directory manually if needed (X509Store should create it)
 3. Check user has write permissions to home directory
 4. Verify .NET runtime is properly installed
@@ -822,7 +873,7 @@ docker exec artemis-api ls -ld /home/app/.dotnet
    - Use proper file permissions (600 on Linux)
 
 4. **Container Security**
-   - Container runs as non-root user (`app`, UID 1000)
+   - Container runs as non-root user (`artemis`, UID 1000)
    - Certificates installed to user store, not system store
    - Read-only volume mounts for certificates
 

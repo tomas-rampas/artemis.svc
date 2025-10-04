@@ -49,6 +49,9 @@ param(
     [Parameter(HelpMessage = "Thumbprint file path")]
     [string]$ThumbprintFile = "/app/certs/server/thumbprint.txt",
 
+    [Parameter(HelpMessage = "PFX password (from environment or parameter)")]
+    [string]$PfxPassword = $env:CERT_PFX_PASSWORD,
+
     [Parameter(HelpMessage = "Skip confirmation prompts")]
     [switch]$Force
 )
@@ -152,9 +155,9 @@ function Install-CertificateToStore {
 
 function Main {
     Write-Host ""
-    Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
-    Write-Host "  Docker Certificate Installation - X509Store Registration" -ForegroundColor Cyan
-    Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Host "╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+    Write-Host "║    Docker Certificate Installation - X509Store Registration    ║" -ForegroundColor Cyan
+    Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
     Write-Host ""
 
     try {
@@ -193,20 +196,36 @@ function Main {
 
         # Install server certificates from docker/my
         Write-Step "Installing server certificates from: $DockerMyDir"
-        $serverCerts = Get-ChildItem -Path $DockerMyDir -Filter "*.pfx"
 
-        if ($serverCerts.Count -eq 0) {
-            throw "No PFX files found in $DockerMyDir"
-        }
+        # If thumbprint is specified, only install that specific certificate
+        if ($thumbprint) {
+            $serverCertFile = Join-Path $DockerMyDir "$thumbprint.pfx"
+            if (-not (Test-Path $serverCertFile)) {
+                throw "Server certificate not found: $serverCertFile"
+            }
 
-        foreach ($serverCert in $serverCerts) {
-            # Note: In production, password should be passed securely (environment variable, secret)
-            # For development with self-signed certificates, we use empty password or known password
+            Write-Verbose "Installing certificate with thumbprint: $thumbprint"
             Install-CertificateToStore `
-                -CertificatePath $serverCert.FullName `
+                -CertificatePath $serverCertFile `
                 -StoreName "My" `
                 -StoreLocation "CurrentUser" `
-                -Password "" | Out-Null
+                -Password $PfxPassword | Out-Null
+        } else {
+            # No thumbprint specified, install all PFX files
+            $serverCerts = Get-ChildItem -Path $DockerMyDir -Filter "*.pfx"
+
+            if ($serverCerts.Count -eq 0) {
+                throw "No PFX files found in $DockerMyDir"
+            }
+
+            foreach ($serverCert in $serverCerts) {
+                # Password comes from environment variable CERT_PFX_PASSWORD or parameter
+                Install-CertificateToStore `
+                    -CertificatePath $serverCert.FullName `
+                    -StoreName "My" `
+                    -StoreLocation "CurrentUser" `
+                    -Password $PfxPassword | Out-Null
+            }
         }
 
         # Verify installation
@@ -265,7 +284,7 @@ function Main {
 
         Write-Host ""
         Write-Host "╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Green
-        Write-Host "║  DOCKER CERTIFICATE INSTALLATION COMPLETED                     ║" -ForegroundColor Green
+        Write-Host "║            DOCKER CERTIFICATE INSTALLATION COMPLETED           ║" -ForegroundColor Green
         Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor Green
         Write-Host ""
 
@@ -273,7 +292,7 @@ function Main {
     } catch {
         Write-Host ""
         Write-Host "╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Red
-        Write-Host "║  DOCKER CERTIFICATE INSTALLATION FAILED                        ║" -ForegroundColor Red
+        Write-Host "║             DOCKER CERTIFICATE INSTALLATION FAILED             ║" -ForegroundColor Red
         Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor Red
         Write-Error "Error: $_"
         return 1

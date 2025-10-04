@@ -16,18 +16,21 @@ services:
       - CertificateSettings__Thumbprint=${CERT_THUMBPRINT:-}
       - CertificateSettings__StoreName=My
       - CertificateSettings__StoreLocation=CurrentUser
+      # PFX password for certificate installation (read from file)
+      - CERT_PFX_PASSWORD=${CERT_PFX_PASSWORD:-}
     volumes:
       # Certificate stores - mounted from ./certs/docker/ created by setup-certificates.sh
-      # These follow Microsoft's .NET certificate store structure for Linux
-      - ./certs/docker/my:/certs/my:ro
-      - ./certs/docker/root:/certs/root:ro
+      # Paths match Install-DockerCertificates.ps1 expectations
+      - ./certs/docker/my:/app/certs/docker/my:ro
+      - ./certs/docker/root:/app/certs/docker/root:ro
+      - ./certs/server:/app/certs/server:ro
       # Application logs
       - ./logs:/app/logs
     restart: unless-stopped
     networks:
       - artemis-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/api/invoices", "||", "exit", "1"]
+      test: ["CMD-SHELL", "pwsh -Command 'try { (Invoke-WebRequest -Uri http://localhost:5000/api/invoices -UseBasicParsing -TimeoutSec 5).StatusCode -eq 200 } catch { exit 1 }'"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -111,6 +111,7 @@ $ServerCSRFile = Join-Path $ServerDir "artemis-server.csr"
 $ServerCertFile = Join-Path $ServerDir "artemis-server.crt"
 $ServerPfxFile = Join-Path $ServerDir "artemis-server.pfx"
 $ThumbprintFile = Join-Path $ServerDir "thumbprint.txt"
+$PfxPasswordFile = Join-Path $ServerDir "pfx-password.txt"
 $OpenSSLConfigFile = Join-Path $ServerDir "openssl.cnf"
 
 # Configuration files
@@ -930,6 +931,23 @@ function Main {
             Write-Information "Generating secure random password for PFX file"
             $PfxPassword = New-SecurePassword
         }
+
+        # Save PFX password to file for Docker integration
+        # SECURITY WARNING: This file contains the password in plain text for Docker container usage
+        # Ensure this file has restrictive permissions and is not committed to version control
+        Write-Step "Saving PFX password for Docker integration"
+        $passwordPlain = ConvertFrom-SecureStringToPlainText -SecureString $PfxPassword
+        Set-Content -Path $PfxPasswordFile -Value $passwordPlain -Force -NoNewline
+
+        # Set restrictive permissions on password file (600 = owner read/write only)
+        if (Test-Path $PfxPasswordFile) {
+            chmod 600 $PfxPasswordFile
+            Write-Success "PFX password saved to: $PfxPasswordFile (permissions: 600)"
+            Write-Warning "SECURITY: Password file contains plain text password - ensure it is not committed to version control"
+        }
+
+        # Clear sensitive variable
+        $passwordPlain = $null
 
         # Clean up old certificates if requested
         if ($CleanupOld) {
