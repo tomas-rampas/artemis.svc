@@ -36,6 +36,56 @@ This project builds two custom base images from Red Hat UBI8:
 
 Both images include .NET 9.0 and PowerShell Core 7+ installed from Microsoft's official RHEL repositories, ensuring 100% feature parity with Microsoft images while meeting corporate UBI requirements.
 
+## 🚀 Quick Start (5 Minutes)
+
+Get up and running in 5 simple steps:
+
+### 1. Build Base Images (One-time setup)
+```bash
+pwsh ./build-base-images.ps1
+```
+
+### 2. Generate Certificates
+```bash
+pwsh ./Setup-Certificates.ps1
+```
+
+### 3. Start Application
+```bash
+pwsh ./Start-DockerCompose.ps1
+```
+
+### 4. Verify Deployment
+```bash
+# Check container status
+docker-compose ps
+
+# View logs
+docker-compose logs -f artemis-api
+
+# Test HTTP endpoint
+curl http://localhost:5000/api/invoices
+
+# Test HTTPS endpoint
+curl -k https://localhost:5001/api/invoices
+
+# Verify certificates installed
+docker exec artemis-invoicing-api pwsh -Command \
+  '$store = [System.Security.Cryptography.X509Certificates.X509Store]::new("My", "CurrentUser"); \
+   $store.Open("ReadOnly"); \
+   Write-Host "Certificates: $($store.Certificates.Count)"; \
+   $store.Close()'
+```
+
+### 5. Stop Application
+```bash
+docker-compose down
+```
+
+**That's it!** Your ASP.NET Core API is now running with SSL/TLS certificates in Docker. 🎉
+
+For detailed explanations and troubleshooting, see the sections below.
+
 ## Why This Project?
 
 Configuring SSL/TLS certificates for ASP.NET Core in Docker on Linux is **non-trivial**:
@@ -106,7 +156,7 @@ This project demonstrates:
 - ✅ Swagger/OpenAPI documentation
 - ✅ Proper HTTPS endpoint configuration
 
-## Quick Start
+## Detailed Setup Guide
 
 ### Prerequisites
 
