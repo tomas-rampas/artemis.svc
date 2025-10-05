@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   artemis-api:
     # Corporate requirement: Using Red Hat Universal Base Images (UBI)
