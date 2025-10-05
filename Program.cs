@@ -1,6 +1,6 @@
-using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
 using Artemis.Svc.Services;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.OpenApi.Models;
@@ -61,30 +61,25 @@ builder.WebHost.ConfigureKestrel((context, serverOptions) =>
 
 // Add services to the container
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
 
-// Configure Swagger/OpenAPI
-builder.Services.AddSwaggerGen(c =>
+// Configure OpenAPI (native .NET 9 support - replaces AddEndpointsApiExplorer + AddSwaggerGen)
+builder.Services.AddOpenApi(options =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo
+    options.AddDocumentTransformer((document, context, cancellationToken) =>
     {
-        Title = "Artemis Invoicing API",
-        Version = "v1",
-        Description = "ASP.NET Core Web API for Invoice Management System with SSL/TLS Support",
-        Contact = new OpenApiContact
+        document.Info = new()
         {
-            Name = "Artemis Team",
-            Email = "support@artemis.local"
-        }
+            Title = "Artemis Invoicing API",
+            Version = "v1",
+            Description = "ASP.NET Core Web API for Invoice Management System with SSL/TLS Support",
+            Contact = new()
+            {
+                Name = "Artemis Team",
+                Email = "support@artemis.local"
+            }
+        };
+        return Task.CompletedTask;
     });
-
-    // Include XML comments for API documentation
-    var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
-    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
-    if (File.Exists(xmlPath))
-    {
-        c.IncludeXmlComments(xmlPath);
-    }
 });
 
 // Register application services
@@ -95,11 +90,15 @@ var app = builder.Build();
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
+    // Map OpenAPI endpoint (replaces UseSwagger)
+    app.MapOpenApi();
+
+    // Use Swagger UI to visualize OpenAPI document
+    app.UseSwaggerUI(options =>
     {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Artemis Invoicing API v1");
-        c.RoutePrefix = string.Empty; // Serve Swagger UI at root
+        options.SwaggerEndpoint("/openapi/v1.json", "Artemis Invoicing API v1");
+        options.RoutePrefix = string.Empty; // Serve Swagger UI at root
+        options.DocumentTitle = "Artemis Invoicing API - Swagger UI";
     });
 }
 

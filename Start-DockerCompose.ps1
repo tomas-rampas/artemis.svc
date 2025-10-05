@@ -8,7 +8,7 @@
 .DESCRIPTION
     This script sets up environment variables for certificate integration before starting Docker containers.
     It reads certificate thumbprint and PFX password from files, exports them as environment variables,
-    and executes docker-compose commands.
+    and executes docker compose commands.
 
 .PARAMETER Command
     Docker Compose command to execute. Valid values: build, up, down, restart, logs, status, default (up -d).
@@ -157,41 +157,41 @@ try {
     $env:CERT_THUMBPRINT = $certThumbprint
     $env:CERT_PFX_PASSWORD = $certPfxPassword
 
-    # Execute docker-compose command
+    # Execute docker compose command
     switch ($Command) {
         "build" {
             Write-Host "Building Docker images..." -ForegroundColor Yellow
-            docker-compose build
+            docker compose build
         }
         "up" {
             if ($Detached) {
                 Write-Host "Starting Docker containers (background)..." -ForegroundColor Yellow
-                docker-compose up -d
+                docker compose up -d
             } else {
                 Write-Host "Starting Docker containers (foreground)..." -ForegroundColor Yellow
-                docker-compose up
+                docker compose up
             }
         }
         "down" {
             Write-Host "Stopping Docker containers..." -ForegroundColor Yellow
-            docker-compose down
+            docker compose down
         }
         "restart" {
             Write-Host "Restarting Docker containers..." -ForegroundColor Yellow
-            docker-compose restart
+            docker compose restart
         }
         "logs" {
             Write-Host "Showing Docker container logs..." -ForegroundColor Yellow
-            docker-compose logs -f
+            docker compose logs -f
         }
         "status" {
             Write-Host "Docker container status:" -ForegroundColor Yellow
-            docker-compose ps
+            docker compose ps
         }
         "default" {
             # Default: up in detached mode
             Write-Host "Starting Docker containers (background)..." -ForegroundColor Yellow
-            docker-compose up -d
+            docker compose up -d
 
             Write-Host ""
             Write-SuccessMessage "Containers started successfully!"
@@ -210,9 +210,9 @@ try {
         }
     }
 
-    # Check docker-compose exit code
+    # Check docker compose exit code
     if ($LASTEXITCODE -ne 0) {
-        Write-ErrorMessage "docker-compose command failed with exit code: $LASTEXITCODE"
+        Write-ErrorMessage "docker compose command failed with exit code: $LASTEXITCODE"
         exit $LASTEXITCODE
     }
 
